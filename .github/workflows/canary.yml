@@ -1,0 +1,64 @@
+name: canary
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['canary/**', '.github/workflows/canary.yml']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: canary
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install puppeteer-core
+        run: npm init -y >/dev/null && npm i --no-save puppeteer-core@23 >/dev/null
+
+      - name: Run canary
+        id: canary
+        continue-on-error: true
+        env:
+          SW_PROJECT_ID: ${{ secrets.SW_PROJECT_ID }}
+          SW_API_TOKEN: ${{ secrets.SW_API_TOKEN }}
+          SW_SPACE_HOST: ${{ secrets.SW_SPACE_HOST }}
+          STAGING_HEALTH_URL: ${{ secrets.STAGING_HEALTH_URL }}
+          STAGING_BYPASS: ${{ secrets.STAGING_BYPASS }}
+          CHROME_PATH: /usr/bin/google-chrome
+        run: node canary/telephony-canary.mjs 2>&1 | tee canary-run.log
+
+      - name: Publish result to Pages data
+        run: |
+          git config user.name "canary-bot"
+          git config user.email "canary@theleadrouter.com"
+          git add data/status.json data/history.json
+          # Only commit when content actually changed (status flips or first run);
+          # timestamps alone always change, so compare check outcomes instead.
+          git diff --cached --quiet && echo "no change" && exit 0 || true
+          git commit -m "canary: $(date -u +%FT%TZ)"
+          git pull --rebase origin main
+          git push origin main
+
+      - name: Summary
+        run: |
+          echo '## Canary result' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          tail -20 canary-run.log >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail job if canary failed
+        if: steps.canary.outcome == 'failure'
+        run: exit 1

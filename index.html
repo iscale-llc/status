@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lead Router Status</title>
+<style>
+  :root { --bg:#f8fafc; --card:#ffffff; --ink:#0f172a; --muted:#64748b; --ok:#16a34a; --bad:#dc2626; --border:#e2e8f0; }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--bg); color:var(--ink); font:16px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; padding:2rem 1rem; }
+  main { max-width:720px; margin:0 auto; }
+  h1 { font-size:1.4rem; margin-bottom:.25rem; }
+  .sub { color:var(--muted); font-size:.9rem; margin-bottom:1.5rem; }
+  .banner { border-radius:12px; padding:1rem 1.25rem; font-weight:600; margin-bottom:1.5rem; color:#fff; }
+  .banner.ok { background:var(--ok); } .banner.bad { background:var(--bad); } .banner.unknown { background:var(--muted); }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:12px; overflow:hidden; margin-bottom:1.5rem; }
+  .row { display:flex; justify-content:space-between; align-items:center; padding:.9rem 1.25rem; border-bottom:1px solid var(--border); }
+  .row:last-child { border-bottom:none; }
+  .dot { display:inline-block; width:.65rem; height:.65rem; border-radius:50%; margin-right:.6rem; }
+  .dot.ok { background:var(--ok); } .dot.bad { background:var(--bad); }
+  .name { font-weight:500; }
+  .detail { color:var(--muted); font-size:.85rem; }
+  .strip { display:flex; gap:2px; padding:1rem 1.25rem; overflow-x:auto; }
+  .tick { width:6px; height:28px; border-radius:2px; background:var(--ok); flex:0 0 auto; }
+  .tick.bad { background:var(--bad); }
+  .foot { color:var(--muted); font-size:.8rem; text-align:center; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Lead Router Status</h1>
+  <p class="sub">Independent synthetic monitoring — probes run every 15 minutes from outside our hosting provider.</p>
+  <div id="banner" class="banner unknown">Loading…</div>
+  <div class="card" id="components"></div>
+  <div class="card"><div class="strip" id="strip"></div></div>
+  <p class="foot" id="foot"></p>
+</main>
+<script>
+const NAMES = {
+  'app-prod':      'Website & API',
+  'app-staging':   'Staging environment',
+  'sw-token-mint': 'Telephony provider — control plane',
+  'sw-provision':  'Telephony provider — provisioning',
+  'sw-webrtc-reg': 'Browser softphone (WebRTC)',
+}
+async function load() {
+  try {
+    const bust = '?t=' + Math.floor(Date.now() / 60000)
+    const s = await (await fetch('data/status.json' + bust)).json()
+    const banner = document.getElementById('banner')
+    const ok = s.overall === 'operational'
+    banner.className = 'banner ' + (ok ? 'ok' : 'bad')
+    banner.textContent = ok ? 'All systems operational' : 'Some systems are degraded'
+    document.getElementById('components').innerHTML = s.checks.map(c => `
+      <div class="row">
+        <span class="name"><span class="dot ${c.ok ? 'ok' : 'bad'}"></span>${NAMES[c.name] ?? c.name}</span>
+        <span class="detail">${c.ok ? 'Operational' : 'Degraded'} · ${c.ms}ms</span>
+      </div>`).join('')
+    document.getElementById('foot').textContent = 'Last checked ' + new Date(s.generatedAt).toLocaleString()
+    try {
+      const h = await (await fetch('data/history.json' + bust)).json()
+      document.getElementById('strip').innerHTML = h.map(e =>
+        `<span class="tick ${e.ok ? '' : 'bad'}" title="${e.t}${e.fails?.length ? ' — ' + e.fails.join(', ') : ''}"></span>`).join('')
+    } catch {}
+  } catch {
+    const banner = document.getElementById('banner')
+    banner.className = 'banner unknown'
+    banner.textContent = 'Status data unavailable'
+  }
+}
+load()
+setInterval(load, 5 * 60 * 1000)
+</script>
+</body>
+</html>
