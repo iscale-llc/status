@@ -1,1 +1,36 @@
-{"generatedAt":"1970-01-01T00:00:00Z","overall":"unknown","checks":[]}
+{
+  "generatedAt": "2026-08-18T00:03:48.734Z",
+  "overall": "degraded",
+  "checks": [
+    {
+      "name": "app-prod",
+      "ok": true,
+      "ms": 275,
+      "detail": "HTTP 200"
+    },
+    {
+      "name": "app-staging",
+      "ok": true,
+      "ms": 5694,
+      "detail": "HTTP 200"
+    },
+    {
+      "name": "sw-token-mint",
+      "ok": true,
+      "ms": 609,
+      "detail": "token minted"
+    },
+    {
+      "name": "sw-provision",
+      "ok": false,
+      "ms": 380,
+      "detail": "create HTTP 500"
+    },
+    {
+      "name": "sw-webrtc-reg",
+      "ok": false,
+      "ms": 8447,
+      "detail": "[CANARY] FAIL: Failed to read the 'sessionStorage' property from 'Window': Access is denied for this document."
+    }
+  ]
+}
