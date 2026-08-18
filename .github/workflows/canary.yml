@@ -38,7 +38,9 @@ jobs:
           STAGING_HEALTH_URL: ${{ secrets.STAGING_HEALTH_URL }}
           STAGING_BYPASS: ${{ secrets.STAGING_BYPASS }}
           CHROME_PATH: /usr/bin/google-chrome
-        run: node canary/telephony-canary.mjs 2>&1 | tee canary-run.log
+        run: |
+          set -o pipefail
+          node canary/telephony-canary.mjs 2>&1 | tee canary-run.log
 
       - name: Publish result to Pages data
         run: |
