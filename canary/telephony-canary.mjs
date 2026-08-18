@@ -126,6 +126,20 @@ await probe('sw-webrtc-reg', async () => {
     headless: 'new',
     args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'],
   })
+  // The SDK touches sessionStorage, which is denied on origin-less documents
+  // (setContent/about:blank) — serve the harness from a real localhost origin.
+  const { createServer } = await import('http')
+  const html = `<!doctype html><script type="module">
+      try {
+        const m = await import('https://esm.sh/@signalwire/js@3.30.0')
+        const c = await m.SignalWire({ token: ${JSON.stringify(sat)} })
+        await c.online({ incomingCallHandlers: { all: () => {} } })
+        console.log('[CANARY] OK')
+      } catch (e) { console.log('[CANARY] FAIL: ' + ((e && e.message) || e)) }
+    </script>`
+  const server = createServer((_, res) => { res.setHeader('Content-Type', 'text/html'); res.end(html) })
+  await new Promise((res) => server.listen(0, '127.0.0.1', res))
+  const port = server.address().port
   try {
     const page = await browser.newPage()
     const outcome = new Promise((resolve, reject) => {
@@ -135,20 +149,14 @@ await probe('sw-webrtc-reg', async () => {
         if (t.includes('[CANARY] FAIL')) reject(new Error(t.slice(0, 180)))
       })
     })
-    await page.setContent(`<script type="module">
-      try {
-        const m = await import('https://esm.sh/@signalwire/js@3.30.0')
-        const c = await m.SignalWire({ token: ${JSON.stringify(sat)} })
-        await c.online({ incomingCallHandlers: { all: () => {} } })
-        console.log('[CANARY] OK')
-      } catch (e) { console.log('[CANARY] FAIL: ' + ((e && e.message) || e)) }
-    </script>`)
+    await page.goto(`http://127.0.0.1:${port}/`)
     return await Promise.race([
       outcome,
       new Promise((_, rej) => setTimeout(() => rej(new Error('registration timed out (45s)')), 45_000)),
     ])
   } finally {
     await browser.close()
+    server.close()
   }
 }, 60_000)
 
