@@ -1,17 +1,17 @@
 {
-  "generatedAt": "2026-08-18T20:48:07.675Z",
+  "generatedAt": "2026-08-18T21:18:56.141Z",
   "overall": "degraded",
   "checks": [
     {
       "name": "app-prod",
       "ok": true,
-      "ms": 231,
+      "ms": 298,
       "detail": "HTTP 200"
     },
     {
       "name": "app-staging",
       "ok": true,
-      "ms": 935,
+      "ms": 324,
       "detail": "HTTP 200"
     },
     {
@@ -23,13 +23,13 @@
     {
       "name": "sw-provision",
       "ok": false,
-      "ms": 410,
+      "ms": 382,
       "detail": "create HTTP 500"
     },
     {
       "name": "sw-webrtc-reg",
       "ok": true,
-      "ms": 11121,
+      "ms": 9769,
       "detail": "registered"
     }
   ]
