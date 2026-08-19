@@ -1,35 +1,35 @@
 {
-  "generatedAt": "2026-08-19T11:38:15.993Z",
+  "generatedAt": "2026-08-19T12:00:20.316Z",
   "overall": "degraded",
   "checks": [
     {
       "name": "app-prod",
       "ok": true,
-      "ms": 199,
+      "ms": 253,
       "detail": "HTTP 200"
     },
     {
       "name": "app-staging",
       "ok": true,
-      "ms": 313,
+      "ms": 238,
       "detail": "HTTP 200"
     },
     {
       "name": "sw-token-mint",
       "ok": true,
-      "ms": 279,
+      "ms": 298,
       "detail": "token minted"
     },
     {
       "name": "sw-provision",
       "ok": false,
-      "ms": 246,
+      "ms": 339,
       "detail": "create HTTP 500"
     },
     {
       "name": "sw-webrtc-reg",
       "ok": true,
-      "ms": 9481,
+      "ms": 9496,
       "detail": "registered"
     }
   ]
