@@ -17,6 +17,11 @@
  * consumed by the GitHub Pages status page. NO secrets, ids, or URLs with
  * tokens ever go into the output.
  *
+ * Exit code = ALERT, not state: 1 only when the failure set changed vs the
+ * previous committed status.json, or a 24h reminder is due while degraded.
+ * See the "write result" section. A green Actions run does NOT mean
+ * operational — read data/status.json / the status page for current state.
+ *
  * Env (all required unless noted):
  *   SW_PROJECT_ID, SW_API_TOKEN, SW_SPACE_HOST   — staging SignalWire project
  *   STAGING_HEALTH_URL, STAGING_BYPASS           — staging health through the SSO wall
@@ -161,13 +166,37 @@ await probe('sw-webrtc-reg', async () => {
 }, 60_000)
 
 // ── write result ────────────────────────────────────────────────────────────
-const overall = results.every((r) => r.ok)
+const { writeFileSync, mkdirSync, readFileSync, existsSync } = await import('fs')
+const fails = results.filter((r) => !r.ok).map((r) => r.name).sort()
+const overall = fails.length === 0
+
+// Alerting is TRANSITION-based, not state-based. The exit code drives the
+// workflow's job failure, and GitHub emails on every failed run — so exiting 1
+// while a KNOWN issue persists means an email every 15 minutes until it clears
+// (62 in a row for the 08-18 sw-provision breakage), which trains the owner to
+// ignore the canary. Exit 1 only when:
+//   • the set of failing probes differs from the previous committed run
+//     (something new broke, or the failure changed shape), or
+//   • still degraded and >24h since the last alert (reminder — a long outage
+//     must not go permanently silent).
+// The status page gets every result regardless; a green Actions run therefore
+// means "no NEW news", not "operational" — data/status.json is the truth.
+// Previous state unreadable ⇒ treat as all-green, so a first run fails open.
+let prev = {}
+try { prev = JSON.parse(readFileSync('data/status.json', 'utf8')) } catch {}
+const prevFails = (prev.checks ?? []).filter((c) => !c.ok).map((c) => c.name).sort()
+const failSetChanged = JSON.stringify(fails) !== JSON.stringify(prevFails)
+const lastAlertMs = prev.lastAlertAt ? Date.parse(prev.lastAlertAt) : 0
+const reminderDue = !overall && Date.now() - lastAlertMs > 24 * 3600 * 1000
+const alert = !overall && (failSetChanged || reminderDue)
+
 const out = {
   generatedAt: now(),
   overall: overall ? 'operational' : 'degraded',
+  // when the last email fired; cleared on recovery so a fresh incident always alerts
+  lastAlertAt: overall ? null : (alert ? now() : prev.lastAlertAt ?? null),
   checks: results.map(({ name, ok, ms, detail }) => ({ name, ok, ms, detail })),
 }
-const { writeFileSync, mkdirSync, readFileSync, existsSync } = await import('fs')
 mkdirSync('data', { recursive: true })
 writeFileSync('data/status.json', JSON.stringify(out, null, 2))
 
@@ -179,4 +208,9 @@ hist.push({ t: out.generatedAt, ok: overall, fails: results.filter((r) => !r.ok)
 writeFileSync(histPath, JSON.stringify(hist.slice(-400)))
 
 console.log(`\nOVERALL: ${out.overall.toUpperCase()}`)
-process.exit(overall ? 0 : 1)
+if (!overall) {
+  console.log(alert
+    ? `ALERT: failing job — ${failSetChanged ? `failure set changed [${prevFails.join(', ') || 'none'}] → [${fails.join(', ')}]` : '24h reminder, still degraded'}`
+    : `ALERT: suppressed — [${fails.join(', ')}] unchanged, last alerted ${out.lastAlertAt}`)
+}
+process.exit(alert ? 1 : 0)

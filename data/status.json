@@ -1,6 +1,7 @@
 {
   "generatedAt": "2026-08-19T16:11:22.999Z",
   "overall": "degraded",
+  "lastAlertAt": "2026-08-19T16:44:41.127Z",
   "checks": [
     {
       "name": "app-prod",

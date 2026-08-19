@@ -47,8 +47,8 @@ jobs:
           git config user.name "canary-bot"
           git config user.email "canary@theleadrouter.com"
           git add data/status.json data/history.json
-          # Only commit when content actually changed (status flips or first run);
-          # timestamps alone always change, so compare check outcomes instead.
+          # history.json gains a row every run, so in practice this commits every
+          # run; the guard only skips if the canary produced no output at all.
           git diff --cached --quiet && echo "no change" && exit 0 || true
           git commit -m "canary: $(date -u +%FT%TZ)"
           git pull --rebase origin main
@@ -61,6 +61,9 @@ jobs:
           tail -20 canary-run.log >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Fail job if canary failed
+      # Exit 1 from the canary means ALERT (failure-set transition or 24h
+      # reminder), not merely "degraded" — suppressed known-failure runs come
+      # back green. Current state lives in data/status.json / the status page.
+      - name: Fail job if canary alerted
         if: steps.canary.outcome == 'failure'
         run: exit 1
