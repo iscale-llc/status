@@ -24,6 +24,8 @@
   .tick { width:6px; height:28px; border-radius:2px; background:var(--ok); flex:0 0 auto; }
   .tick.bad { background:var(--bad); }
   .foot { color:var(--muted); font-size:.8rem; text-align:center; }
+  .trend { display:flex; align-items:center; gap:.6rem; }
+  .range { color:var(--muted); font-size:.75rem; white-space:nowrap; }
 </style>
 </head>
 <body>
@@ -32,16 +34,40 @@
   <p class="sub">Independent synthetic monitoring — probes run every 15 minutes from outside our hosting provider.</p>
   <div id="banner" class="banner unknown">Loading…</div>
   <div class="card" id="components"></div>
+  <div class="card" id="trends" style="display:none"></div>
   <div class="card"><div class="strip" id="strip"></div></div>
   <p class="foot" id="foot"></p>
 </main>
 <script>
 const NAMES = {
-  'app-prod':      'Website & API',
-  'app-staging':   'Staging environment',
-  'sw-token-mint': 'Softphone — sign-in',
-  'sw-provision':  'Softphone — new agent setup',
-  'sw-webrtc-reg': 'Softphone — browser calling',
+  'app-prod':         'Website & API',
+  'lead-processing':  'Lead processing — ingest → decision',
+  'lead-ping':        'Lead ping → price return',
+  'call-ping':        'Call ping → response',
+  'app-staging':      'Staging environment',
+  'sw-token-mint':    'Softphone — sign-in',
+  'sw-provision':     'Softphone — new agent setup',
+  'sw-webrtc-reg':    'Softphone — browser calling',
+}
+// Business metrics render first; softphone plumbing last. Unknown names sink
+// to the bottom rather than disappearing.
+const ORDER = Object.keys(NAMES)
+// Metric probes: `detail` carries the number that matters (platform latency
+// over real traffic — NOT the canary fetch's own RTT), `metric` feeds the
+// trend sparklines.
+const METRIC = new Set(['lead-processing', 'lead-ping', 'call-ping'])
+function spark(points, w = 260, h = 36) {
+  const vals = points.filter(p => p != null)
+  if (vals.length < 2) return '<span class="detail">collecting data…</span>'
+  const min = Math.min(...vals), max = Math.max(...vals), span = Math.max(1, max - min)
+  let x = 0, step = w / (points.length - 1), d = []
+  for (const p of points) {
+    if (p != null) d.push(`${x.toFixed(1)},${(h - 4 - ((p - min) / span) * (h - 8)).toFixed(1)}`)
+    x += step
+  }
+  return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" preserveAspectRatio="none">
+    <polyline points="${d.join(' ')}" fill="none" stroke="#0ea5e9" stroke-width="1.5"/>
+  </svg><span class="range">${min}–${max}ms</span>`
 }
 async function load() {
   try {
@@ -51,16 +77,28 @@ async function load() {
     const ok = s.overall === 'operational'
     banner.className = 'banner ' + (ok ? 'ok' : 'bad')
     banner.textContent = ok ? 'All systems operational' : 'Some systems are degraded'
-    document.getElementById('components').innerHTML = s.checks.map(c => `
+    const checks = [...s.checks].sort((a, b) =>
+      (ORDER.indexOf(a.name) + 99 * (ORDER.indexOf(a.name) < 0)) - (ORDER.indexOf(b.name) + 99 * (ORDER.indexOf(b.name) < 0)))
+    document.getElementById('components').innerHTML = checks.map(c => `
       <div class="row">
         <span class="name"><span class="dot ${c.ok ? 'ok' : 'bad'}"></span>${NAMES[c.name] ?? c.name}</span>
-        <span class="detail">${c.ok ? 'Operational' : 'Degraded'} · ${c.ms}ms</span>
+        <span class="detail">${METRIC.has(c.name) && c.detail ? c.detail : (c.ok ? 'Operational' : 'Degraded') + ' · ' + c.ms + 'ms'}</span>
       </div>`).join('')
     document.getElementById('foot').textContent = 'Last checked ' + new Date(s.generatedAt).toLocaleString()
     try {
       const h = await (await fetch('data/history.json' + bust)).json()
       document.getElementById('strip').innerHTML = h.map(e =>
         `<span class="tick ${e.ok ? '' : 'bad'}" title="${e.t}${e.fails?.length ? ' — ' + e.fails.join(', ') : ''}"></span>`).join('')
+      const trendRows = [...METRIC].filter(n => h.some(e => e.m?.[n] != null)).map(n => `
+        <div class="row">
+          <span class="name">${NAMES[n]}</span>
+          <span class="trend">${spark(h.slice(-192).map(e => e.m?.[n] ?? null))}</span>
+        </div>`)
+      const card = document.getElementById('trends')
+      if (trendRows.length) {
+        card.style.display = ''
+        card.innerHTML = '<div class="row"><span class="detail">Latency trends — last 48h of 15-min samples</span></div>' + trendRows.join('')
+      }
     } catch {}
   } catch {
     const banner = document.getElementById('banner')

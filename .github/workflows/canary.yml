@@ -37,6 +37,9 @@ jobs:
           SW_SPACE_HOST: ${{ secrets.SW_SPACE_HOST }}
           STAGING_HEALTH_URL: ${{ secrets.STAGING_HEALTH_URL }}
           STAGING_BYPASS: ${{ secrets.STAGING_BYPASS }}
+          STATUS_METRICS_SECRET: ${{ secrets.STATUS_METRICS_SECRET }}
+          CALL_PING_URL: ${{ secrets.CALL_PING_URL }}
+          CALL_PING_KEY: ${{ secrets.CALL_PING_KEY }}
           CHROME_PATH: /usr/bin/google-chrome
         run: |
           set -o pipefail
