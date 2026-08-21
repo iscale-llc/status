@@ -194,14 +194,20 @@ await probe('sw-provision', async () => {
   // product findInPages: MAX_PAGES=20). Sweep any lr-canary* first.
   const name = 'lr-canary-sip'
   {
-    const listed = await swFetch('/api/fabric/sip_addresses?page_size=100')
-    if (listed.ok) {
-      const rows = (await listed.json()).data ?? []
-      for (const row of rows) {
+    // Walk pages — first-page-only is the silent-miss this product already
+    // paid for (findInPages). page_size=100 still misses leftovers on page 2+.
+    let next = '/api/fabric/sip_addresses?page_size=50'
+    for (let page = 0; page < 20 && next; page++) {
+      const listed = await swFetch(next)
+      if (!listed.ok) break
+      const body = await listed.json()
+      for (const row of body.data ?? []) {
         if (typeof row?.name === 'string' && row.name.startsWith('lr-canary') && row.id) {
           await swFetch(`/api/fabric/sip_addresses/${row.id}`, { method: 'DELETE' })
         }
       }
+      const nxt = body.links?.next
+      next = typeof nxt === 'string' && nxt.length ? nxt.replace(/^https?:\/\/[^/]+/, '') : ''
     }
   }
   // `user` is the SIP username, unique per domain. Omitting it lets SignalWire
