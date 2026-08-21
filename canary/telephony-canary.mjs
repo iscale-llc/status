@@ -189,7 +189,21 @@ await probe('sw-provision', async () => {
   }
   if (!rid) throw new Error('canary subscriber resource not found')
 
-  const name = `lr-canary-${Date.now().toString(36)}`
+  // Stable name so a failed DELETE cannot mint a new leftover every 15 min
+  // (unique `lr-canary-${timestamp}` grew without bound and can exhaust
+  // product findInPages: MAX_PAGES=20). Sweep any lr-canary* first.
+  const name = 'lr-canary-sip'
+  {
+    const listed = await swFetch('/api/fabric/sip_addresses?page_size=100')
+    if (listed.ok) {
+      const rows = (await listed.json()).data ?? []
+      for (const row of rows) {
+        if (typeof row?.name === 'string' && row.name.startsWith('lr-canary') && row.id) {
+          await swFetch(`/api/fabric/sip_addresses/${row.id}`, { method: 'DELETE' })
+        }
+      }
+    }
+  }
   // `user` is the SIP username, unique per domain. Omitting it lets SignalWire
   // default to `*`, which 422s `value_not_unique` ("User is already in use for
   // this domain") as soon as any other address exists on that domain — verified
