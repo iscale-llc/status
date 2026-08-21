@@ -190,11 +190,18 @@ await probe('sw-provision', async () => {
   if (!rid) throw new Error('canary subscriber resource not found')
 
   const name = `lr-canary-${Date.now().toString(36)}`
+  // `user` is the SIP username, unique per domain. Omitting it lets SignalWire
+  // default to `*`, which 422s `value_not_unique` ("User is already in use for
+  // this domain") as soon as any other address exists on that domain — verified
+  // staging 2026-08-21. The product path must send the same field.
   const create = await swFetch('/api/fabric/sip_addresses', {
     method: 'POST',
-    body: JSON.stringify({ name, calling_handler_resource_id: rid }),
+    body: JSON.stringify({ name, user: name, calling_handler_resource_id: rid }),
   })
-  if (!create.ok) throw new Error(`create HTTP ${create.status}`)
+  if (!create.ok) {
+    const t = await create.text().catch(() => '')
+    throw new Error(`create HTTP ${create.status}${t ? ': ' + t.slice(0, 160) : ''}`)
+  }
   const made = await create.json()
   const del = await swFetch(`/api/fabric/sip_addresses/${made.id}`, { method: 'DELETE' })
   if (!del.ok && del.status !== 404) throw new Error(`created OK but delete HTTP ${del.status} (id ${made.id} may linger)`)
