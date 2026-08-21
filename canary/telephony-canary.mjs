@@ -193,9 +193,9 @@ await probe('sw-provision', async () => {
   // (unique `lr-canary-${timestamp}` grew without bound and can exhaust
   // product findInPages: MAX_PAGES=20). Sweep any lr-canary* first.
   const name = 'lr-canary-sip'
-  {
+  const sweepCanaryAddresses = async () => {
     // Walk pages — first-page-only is the silent-miss this product already
-    // paid for (findInPages). page_size=100 still misses leftovers on page 2+.
+    // paid for (findInPages).
     let next = '/api/fabric/sip_addresses?page_size=50'
     for (let page = 0; page < 20 && next; page++) {
       const listed = await swFetch(next)
@@ -210,14 +210,22 @@ await probe('sw-provision', async () => {
       next = typeof nxt === 'string' && nxt.length ? nxt.replace(/^https?:\/\/[^/]+/, '') : ''
     }
   }
+  await sweepCanaryAddresses()
   // `user` is the SIP username, unique per domain. Omitting it lets SignalWire
   // default to `*`, which 422s `value_not_unique` ("User is already in use for
   // this domain") as soon as any other address exists on that domain — verified
   // staging 2026-08-21. The product path must send the same field.
-  const create = await swFetch('/api/fabric/sip_addresses', {
+  const postAddr = () => swFetch('/api/fabric/sip_addresses', {
     method: 'POST',
     body: JSON.stringify({ name, user: name, calling_handler_resource_id: rid }),
   })
+  let create = await postAddr()
+  if (create.status === 422) {
+    // Leftover from a lagged DELETE / overlapping run: sweep again and retry
+    // once. A 5xx on create still fails immediately (08-17 class).
+    await sweepCanaryAddresses()
+    create = await postAddr()
+  }
   if (!create.ok) {
     const t = await create.text().catch(() => '')
     throw new Error(`create HTTP ${create.status}${t ? ': ' + t.slice(0, 160) : ''}`)
